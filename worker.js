@@ -31,6 +31,13 @@ export default {
 
     const source = match[1] || "minecraft";
     const player = match[2];
+    
+    /**
+     * Validate IGN.
+     */
+    if (!/^[a-zA-Z0-9_]{3,16}$/.test(player)) {
+      return new Response("Invalid IGN", { status: 400 });
+    }
 
     /**
      * Upstream URL selection.
