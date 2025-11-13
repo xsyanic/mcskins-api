@@ -1,6 +1,6 @@
 # **Syanic's MC Skins API**
 
-A API powered by Cloudflare Worker that serves Minecraft skins from multiple sources with automatic fallbacks and 24-hour edge caching.
+A API powered by Cloudflare Worker that serves Minecraft skins from multiple sources with automatic fallbacks and 1-hour edge caching.
 
 Base URL: `https://mcskinsapi.syanic.org`
 
