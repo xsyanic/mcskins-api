@@ -32,7 +32,7 @@ If the requested provider fails (404):
 
 ## **Caching**
 
-* Valid responses are cached at Cloudflare’s edge for **24 hours**.
+* Valid responses are cached at Cloudflare’s edge for **1 hour**.
 
 ## **Deploy**
 
