@@ -84,7 +84,7 @@ export default {
       status: 200,
       headers: {
         "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=86400"
+        "Cache-Control": "public, max-age=3600"
       }
     });
 
