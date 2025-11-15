@@ -3,26 +3,12 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    /**
-     * Redirect root path to project repository.
-     */
     if (path === "/" || path === "/index") {
-      return Response.redirect(
-        "https://github.com/xsyanic/mcskins-api",
-        302
-      );
+      return Response.redirect("https://github.com/xsyanic/mcskins-api", 302);
     }
 
-    /**
-     * Route pattern:
-     * /skin/<player>
-     * /skin/<player>.png
-     * /skin/minecraft/<player>.png
-     * /skin/tlauncher/<player>.png
-     * /skin/elyby/<player>.png
-     */
     const match = path.match(
-      /^\/skin(?:\/(minecraft|tlauncher|elyby))?\/([^\/]+?)(?:\.png)?$/
+      /^\/skin(?:\/(minecraft|tlauncher|elyby|sklauncher))?\/([^\/]+?)(?:\.png)?$/
     );
 
     if (!match) {
@@ -31,62 +17,54 @@ export default {
 
     const source = match[1] || "minecraft";
     const player = match[2];
-    
-    /**
-     * Validate IGN.
-     */
+
     if (!/^[a-zA-Z0-9_]{3,16}$/.test(player)) {
       return new Response("Invalid IGN", { status: 400 });
     }
 
-    /**
-     * Upstream URL selection.
-     */
-    let upstream;
-    switch (source) {
-      case "minecraft":
-        upstream = `https://minotar.net/skin/${player}`;
-        break;
-      case "tlauncher":
-        upstream = `https://auth.tlauncher.org/skin/fileservice/skins/skin_${player}.png`;
-        break;
-      case "elyby":
-        upstream = `http://skinsystem.ely.by/skin/${player}.png`;
-        break;
-    }
-
     const cache = caches.default;
-
-    /**
-     * Serve cached response if available.
-     */
     const cached = await cache.match(request);
     if (cached) return cached;
 
-    /**
-     * Primary upstream fetch.
-     */
-    let resp = await fetchSkin(upstream);
+    let resp;
 
-    /**
-     * Fallback 1:
-     * For non-Minecraft providers, fallback to Minotar.
-     */
-    if (!resp.ok && source !== "minecraft") {
+    // ------------------------
+    // SKLAUNCHER skin handling
+    // ------------------------
+    if (source === "sklauncher") {
+      const skinUrl = await getSklauncherSkinUrl(player);
+      if (skinUrl) {
+        resp = await fetchSkin(skinUrl);
+      }
+    }
+
+    // --------------------------
+    // Normal upstream providers
+    // --------------------------
+    if (!resp || !resp.ok) {
+      switch (source) {
+        case "minecraft":
+          resp = await fetchSkin(`https://minotar.net/skin/${player}`);
+          break;
+        case "tlauncher":
+          resp = await fetchSkin(`https://auth.tlauncher.org/skin/fileservice/skins/skin_${player}.png`);
+          break;
+        case "elyby":
+          resp = await fetchSkin(`http://skinsystem.ely.by/skin/${player}.png`);
+          break;
+      }
+    }
+
+    // fallback → minotar
+    if (!resp || !resp.ok) {
       resp = await fetchSkin(`https://minotar.net/skin/${player}`);
     }
 
-    /**
-     * Fallback 2:
-     * Use default Steve skin if skin not available.
-     */
+    // fallback → Steve
     if (!resp.ok) {
       resp = await fetchSkin("https://minotar.net/skin/MHF_Steve");
     }
 
-    /**
-     * Final response.
-     */
     const finalResp = new Response(resp.body, {
       status: 200,
       headers: {
@@ -95,11 +73,7 @@ export default {
       }
     });
 
-    /**
-     * Cache the final response.
-     */
     ctx.waitUntil(cache.put(request, finalResp.clone()));
-
     return finalResp;
   }
 };
@@ -112,4 +86,55 @@ async function fetchSkin(url) {
     redirect: "follow",
     headers: { "User-Agent": "syanic-mcskins-api" }
   });
+}
+
+/**
+ * SKLauncher Username to UUID generator
+ */
+function sklUUID(username) {
+  const name = new TextEncoder().encode("OfflinePlayer:" + username);
+
+  // MD5 hash
+  const hash = md5(name);
+
+  // Java bit patches
+  hash[6] = (hash[6] & 0x0f) | 0x30;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+
+  // Convert to hex string
+  return [...hash].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Fetch SKLauncher profile & extract SKIN URL.
+ */
+async function getSklauncherSkinUrl(username) {
+  try {
+    const uuidHex = sklUUID(username);
+
+    const profileReq = await fetch(
+      `https://sessionserver.skmedix.pl/profile/${uuidHex}.json`,
+      { headers: { "User-Agent": "sklauncher/3.2" } }
+    );
+
+    if (!profileReq.ok) return null;
+
+    const profile = await profileReq.json();
+    const b64 = profile.properties[0].value;
+
+    const decoded = JSON.parse(atob(b64));
+
+    if (!decoded.textures?.SKIN?.url) return null;
+
+    return decoded.textures.SKIN.url;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Minimal MD5 implementation for Worker.
+ */
+function md5(input) {
+  return crypto.subtle.digest("MD5", input).then(buf => new Uint8Array(buf));
 }
