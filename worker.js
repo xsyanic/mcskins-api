@@ -77,38 +77,39 @@ async function fetchSkin(url, extraHeaders = {}) {
 }
 
 async function getSklauncherSkinUrl(username) {
+  const uuidHex = await sklUUID(username);
+
+  const req = await fetch(
+    "https://sessionserver.skmedix.pl/profile/" + uuidHex + ".json",
+    { headers: { "User-Agent": "sklauncher/3.2" } }
+  );
+
+  if (!req.ok) return null;
+
+  const profile = await req.json();
+  if (!profile.properties?.length) return null;
+
+  let decoded;
   try {
-    const uuidHex = await sklUUID(username);
-
-    const profileReq = await fetch(
-      `https://sessionserver.skmedix.pl/profile/${uuidHex}.json`,
-      { headers: { "User-Agent": "sklauncher/3.2" }, redirect: "follow" }
-    );
-
-    if (!profileReq.ok) return null;
-
-    const profile = await profileReq.json();
-    if (!profile.properties?.length) return null;
-
-    const raw = profile.properties[0].value;
-    const decoded = JSON.parse(atob(raw));
-
-    return decoded?.textures?.SKIN?.url || null;
-  } catch {
+    decoded = JSON.parse(atob(profile.properties[0].value));
+  } catch (e) {
     return null;
   }
+
+  if (!decoded.textures?.SKIN?.url) return null;
+
+  return decoded.textures.SKIN.url;
 }
 
 async function sklUUID(username) {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode("OfflinePlayer:" + username);
-  const buf = await crypto.subtle.digest("MD5", bytes);
-  const hash = new Uint8Array(buf);
+  const bytes = new TextEncoder().encode("OfflinePlayer:" + username);
+  const digest = await crypto.subtle.digest("MD5", bytes);
+  const hash = new Uint8Array(digest);
 
   hash[6] = (hash[6] & 0x0f) | 0x30;
   hash[8] = (hash[8] & 0x3f) | 0x80;
 
   return Array.from(hash)
-    .map(b => b.toString(16).padStart(2, "0"))
+    .map(v => v.toString(16).padStart(2, "0"))
     .join("");
 }
