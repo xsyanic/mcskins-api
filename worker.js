@@ -4,7 +4,7 @@ export default {
     const path = url.pathname;
 
     if (path === "/" || path === "/index") {
-      return Response.redirect("https://github.com/xsyanic/mcskins-api", 302);
+      return new Response("Docs: https://github.com/xsyanic/mcskins-api", { status: 200 });
     }
 
     const match = path.match(
@@ -55,12 +55,12 @@ export default {
       }
     }
 
-    // fallback → minotar
+    // fallback to minotar (Minecraft Skin)
     if (!resp || !resp.ok) {
       resp = await fetchSkin(`https://minotar.net/skin/${player}`);
     }
 
-    // fallback → Steve
+    // fallback to Steve Skin
     if (!resp.ok) {
       resp = await fetchSkin("https://minotar.net/skin/MHF_Steve");
     }
@@ -69,7 +69,7 @@ export default {
       status: 200,
       headers: {
         "Content-Type": "image/png",
-        "Cache-Control": "public, max-age=3600"
+        "Cache-Control": "public, max-age=60"
       }
     });
 
