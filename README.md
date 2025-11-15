@@ -18,7 +18,7 @@ Base URL: `https://mcskinsapi.syanic.org`
 * `/skin/tlauncher/<player>`
 * `/skin/tlauncher/<player>.png`
 
-### **SKLauncher**
+### **SKLauncher** (Experimental)
 
 * `/skin/sklauncher/<player>`
 * `/skin/sklauncher/<player>.png`
