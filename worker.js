@@ -4,7 +4,7 @@ export default {
     const path = url.pathname;
 
     if (path === "/" || path === "/index") {
-      return Response.redirect("https://github.com/xsyanic/mcskins-api", 302);
+      return new Response("Docs: https://github.com/xsyanic/mcskins-api", { status: 200 });
     }
 
     const match = path.match(
