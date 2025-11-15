@@ -4,43 +4,34 @@ export default {
     const path = url.pathname;
 
     if (path === "/" || path === "/index") {
-      return new Response("Docs: https://github.com/xsyanic/mcskins-api", { status: 200 });
+      return Response.redirect("https://github.com/xsyanic/mcskins-api", 302);
     }
 
     const match = path.match(
       /^\/skin(?:\/(minecraft|tlauncher|elyby|sklauncher))?\/([^\/]+?)(?:\.png)?$/
     );
 
-    if (!match) {
-      return new Response("Not Found", { status: 404 });
-    }
+    if (!match) return new Response("Not Found", { status: 404 });
 
     const source = match[1] || "minecraft";
     const player = match[2];
 
-    if (!/^[a-zA-Z0-9_]{3,16}$/.test(player)) {
+    if (!/^[a-zA-Z0-9_]{3,16}$/.test(player))
       return new Response("Invalid IGN", { status: 400 });
-    }
 
     const cache = caches.default;
     const cached = await cache.match(request);
     if (cached) return cached;
 
-    let resp;
+    let resp = null;
 
-    // ------------------------
-    // SKLAUNCHER skin handling
-    // ------------------------
     if (source === "sklauncher") {
       const skinUrl = await getSklauncherSkinUrl(player);
       if (skinUrl) {
-        resp = await fetchSkin(skinUrl);
+        resp = await fetchSkin(skinUrl, { "User-Agent": "sklauncher/3.2" });
       }
     }
 
-    // --------------------------
-    // Normal upstream providers
-    // --------------------------
     if (!resp || !resp.ok) {
       switch (source) {
         case "minecraft":
@@ -55,15 +46,11 @@ export default {
       }
     }
 
-    // fallback to minotar (Minecraft Skin)
-    if (!resp || !resp.ok) {
+    if (!resp || !resp.ok)
       resp = await fetchSkin(`https://minotar.net/skin/${player}`);
-    }
 
-    // fallback to Steve Skin
-    if (!resp.ok) {
+    if (!resp.ok)
       resp = await fetchSkin("https://minotar.net/skin/MHF_Steve");
-    }
 
     const finalResp = new Response(resp.body, {
       status: 200,
@@ -78,63 +65,50 @@ export default {
   }
 };
 
-/**
- * Fetch wrapper with custom User-Agent.
- */
-async function fetchSkin(url) {
-  return fetch(url, {
-    redirect: "follow",
-    headers: { "User-Agent": "syanic-mcskins-api" }
-  });
+async function fetchSkin(url, extraHeaders = {}) {
+  try {
+    return await fetch(url, {
+      redirect: "follow",
+      headers: Object.assign({ "User-Agent": "syanic-mcskins-api" }, extraHeaders)
+    });
+  } catch (e) {
+    return new Response(null, { status: 502 });
+  }
 }
 
-/**
- * SKLauncher Username to UUID generator
- */
-function sklUUID(username) {
-  const name = new TextEncoder().encode("OfflinePlayer:" + username);
-
-  // MD5 hash
-  const hash = md5(name);
-
-  // Java bit patches
-  hash[6] = (hash[6] & 0x0f) | 0x30;
-  hash[8] = (hash[8] & 0x3f) | 0x80;
-
-  // Convert to hex string
-  return [...hash].map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-/**
- * Fetch SKLauncher profile & extract SKIN URL.
- */
 async function getSklauncherSkinUrl(username) {
   try {
-    const uuidHex = sklUUID(username);
+    const uuidHex = await sklUUID(username);
 
     const profileReq = await fetch(
       `https://sessionserver.skmedix.pl/profile/${uuidHex}.json`,
-      { headers: { "User-Agent": "sklauncher/3.2" } }
+      { headers: { "User-Agent": "sklauncher/3.2" }, redirect: "follow" }
     );
 
     if (!profileReq.ok) return null;
 
     const profile = await profileReq.json();
-    const b64 = profile.properties[0].value;
+    if (!profile.properties?.length) return null;
 
-    const decoded = JSON.parse(atob(b64));
+    const raw = profile.properties[0].value;
+    const decoded = JSON.parse(atob(raw));
 
-    if (!decoded.textures?.SKIN?.url) return null;
-
-    return decoded.textures.SKIN.url;
-  } catch (e) {
+    return decoded?.textures?.SKIN?.url || null;
+  } catch {
     return null;
   }
 }
 
-/**
- * Minimal MD5 implementation for Worker.
- */
-function md5(input) {
-  return crypto.subtle.digest("MD5", input).then(buf => new Uint8Array(buf));
+async function sklUUID(username) {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode("OfflinePlayer:" + username);
+  const buf = await crypto.subtle.digest("MD5", bytes);
+  const hash = new Uint8Array(buf);
+
+  hash[6] = (hash[6] & 0x0f) | 0x30;
+  hash[8] = (hash[8] & 0x3f) | 0x80;
+
+  return Array.from(hash)
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
 }
